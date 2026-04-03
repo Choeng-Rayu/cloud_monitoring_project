@@ -1,0 +1,16 @@
+# VM2 Netplan Configuration - Target Node (Ubuntu 24.04)
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    enp1s0:
+      dhcp4: no
+      addresses:
+        - 192.168.122.102/24
+      routes:
+        - to: default
+          via: 192.168.122.1
+      nameservers:
+        addresses:
+          - 8.8.8.8
+          - 8.8.4.4
