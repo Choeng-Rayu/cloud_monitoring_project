@@ -1,0 +1,28 @@
+# Prometheus Configuration for GNOME Boxes Setup
+# IPs are on 192.168.122.0/24 network (libvirt NAT)
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          instance: "prometheus-server"
+
+  - job_name: "nodes"
+    static_configs:
+      - targets:
+          - "192.168.122.102:9100"   # VM2 - Target Node
+          - "192.168.122.103:9100"   # VM3 - Target Node
+        labels:
+          env: "monitoring-lab"

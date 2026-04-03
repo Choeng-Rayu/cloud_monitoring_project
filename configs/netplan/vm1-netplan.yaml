@@ -1,0 +1,21 @@
+# VM1 Netplan Configuration - Monitoring Server (Ubuntu 24.04)
+# For GNOME Boxes with libvirt NAT network
+# Interface name is typically enp1s0 for virtio network adapter
+# Copy to: /etc/netplan/50-cloud-init.yaml or 00-installer-config.yaml
+# Apply with: sudo netplan apply
+
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    enp1s0:
+      dhcp4: no
+      addresses:
+        - 192.168.122.101/24
+      routes:
+        - to: default
+          via: 192.168.122.1
+      nameservers:
+        addresses:
+          - 8.8.8.8
+          - 8.8.4.4
