@@ -143,3 +143,14 @@ export function formatBytes(bytes: number): string {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
+
+export async function checkPrometheusHealth(): Promise<boolean> {
+  try {
+    const response = await fetch(`${PROMETHEUS_URL}/-/healthy`, {
+      cache: 'no-store',
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}

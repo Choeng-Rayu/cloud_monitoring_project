@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 
 interface MetricGaugeProps {
-  value: number;
+  value: number | null | undefined;
   label: string;
   maxValue?: number;
   size?: "sm" | "md" | "lg";
@@ -17,7 +17,11 @@ export function MetricGauge({
   size = "md",
   color = "cyan"
 }: MetricGaugeProps) {
-  const percentage = Math.min((value / maxValue) * 100, 100);
+  // Handle undefined, null, or NaN values
+  const safeValue = typeof value === 'number' && !isNaN(value) ? value : 0;
+  const isLoading = value === null || value === undefined;
+  
+  const percentage = Math.min(Math.max((safeValue / maxValue) * 100, 0), 100);
   const circumference = 2 * Math.PI * 45;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
@@ -35,7 +39,8 @@ export function MetricGauge({
     red: "stroke-red-500",
   };
 
-  const dynamicColor = percentage >= 90 ? "stroke-red-500" : 
+  const dynamicColor = isLoading ? "stroke-zinc-600" :
+                       percentage >= 90 ? "stroke-red-500" : 
                        percentage >= 70 ? "stroke-amber-500" : 
                        colors[color];
 
@@ -63,14 +68,18 @@ export function MetricGauge({
             className={cn("transition-all duration-500", dynamicColor)}
             style={{
               strokeDasharray: circumference,
-              strokeDashoffset,
+              strokeDashoffset: isNaN(strokeDashoffset) ? circumference : strokeDashoffset,
             }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={cn("font-bold text-white font-mono", sizes[size].text)}>
-            {value.toFixed(1)}%
-          </span>
+          {isLoading ? (
+            <span className="text-zinc-500 text-sm">Loading...</span>
+          ) : (
+            <span className={cn("font-bold text-white font-mono", sizes[size].text)}>
+              {safeValue.toFixed(1)}%
+            </span>
+          )}
         </div>
       </div>
       <span className="mt-2 text-sm text-zinc-400">{label}</span>
