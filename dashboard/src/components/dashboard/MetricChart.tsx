@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { 
   LineChart, 
   Line, 
@@ -32,9 +32,30 @@ export function MetricChart({
   type = "area"
 }: MetricChartProps) {
   const [mounted, setMounted] = useState(false);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
+    
+    // Get container dimensions after mount
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        const { offsetWidth, offsetHeight } = containerRef.current;
+        setDimensions({ width: offsetWidth, height: offsetHeight });
+      }
+    };
+
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    
+    // Small delay to ensure container is properly sized
+    const timeout = setTimeout(updateDimensions, 100);
+    
+    return () => {
+      window.removeEventListener('resize', updateDimensions);
+      clearTimeout(timeout);
+    };
   }, []);
 
   const chartData = data.map((point) => ({
@@ -58,7 +79,7 @@ export function MetricChart({
     );
   }
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
         <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-lg">
@@ -72,71 +93,81 @@ export function MetricChart({
     return null;
   };
 
+  // Don't render chart if no data or dimensions not ready
+  const hasValidDimensions = dimensions.width > 0;
+  const hasData = chartData.length > 0;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[200px]">
-          <ResponsiveContainer width="100%" height="100%">
-            {type === "area" ? (
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id={`gradient-${title}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={color} stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor={color} stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                <XAxis 
-                  dataKey="time" 
-                  stroke="#71717a" 
-                  fontSize={12}
-                  tickLine={false}
-                />
-                <YAxis 
-                  stroke="#71717a" 
-                  fontSize={12}
-                  tickLine={false}
-                  domain={[0, 100]}
-                  tickFormatter={(value) => `${value}${unit}`}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke={color}
-                  strokeWidth={2}
-                  fill={`url(#gradient-${title})`}
-                />
-              </AreaChart>
-            ) : (
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                <XAxis 
-                  dataKey="time" 
-                  stroke="#71717a" 
-                  fontSize={12}
-                  tickLine={false}
-                />
-                <YAxis 
-                  stroke="#71717a" 
-                  fontSize={12}
-                  tickLine={false}
-                  domain={[0, 100]}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke={color}
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </LineChart>
-            )}
-          </ResponsiveContainer>
+        <div ref={containerRef} className="h-[200px] w-full" style={{ minHeight: '200px', minWidth: '100px' }}>
+          {hasValidDimensions && hasData ? (
+            <ResponsiveContainer width="100%" height={200}>
+              {type === "area" ? (
+                <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id={`gradient-${title.replace(/\s+/g, '-')}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={color} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={color} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis 
+                    dataKey="time" 
+                    stroke="#71717a" 
+                    fontSize={12}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    stroke="#71717a" 
+                    fontSize={12}
+                    tickLine={false}
+                    domain={[0, 100]}
+                    tickFormatter={(value) => `${value}${unit}`}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke={color}
+                    strokeWidth={2}
+                    fill={`url(#gradient-${title.replace(/\s+/g, '-')})`}
+                  />
+                </AreaChart>
+              ) : (
+                <LineChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis 
+                    dataKey="time" 
+                    stroke="#71717a" 
+                    fontSize={12}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    stroke="#71717a" 
+                    fontSize={12}
+                    tickLine={false}
+                    domain={[0, 100]}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke={color}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
+              )}
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center text-zinc-500">
+              {!hasData ? "No data available" : "Loading..."}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
