@@ -13,6 +13,12 @@ import { getNodeMetrics, getTargets, getCPUHistory } from "@/lib/prometheus";
 import { Activity, ExternalLink, RefreshCw } from "lucide-react";
 import Link from "next/link";
 
+interface ActivityItem {
+  time: string;
+  event: string;
+  type: "info" | "warning" | "success" | "danger";
+}
+
 // Client-only time display to prevent hydration mismatch
 function ClientTime({ date }: { date: Date }) {
   const [mounted, setMounted] = useState(false);
@@ -31,6 +37,7 @@ function ClientTime({ date }: { date: Date }) {
 export default function DashboardPage() {
   const [nodes, setNodes] = useState<VMNode[]>(initialNodes);
   const [cpuHistory, setCpuHistory] = useState<Record<string, MetricDataPoint[]>>({});
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
@@ -64,6 +71,13 @@ export default function DashboardPage() {
         historyData[node.id] = await getCPUHistory(instance, 1);
       }
       setCpuHistory(historyData);
+
+      // Fetch recent activity
+      const activityResponse = await fetch("/api/activity");
+      if (activityResponse.ok) {
+        const activityData = await activityResponse.json();
+        setActivities(activityData.activities || []);
+      }
     } catch (error) {
       console.error("Failed to fetch metrics:", error);
     } finally {
@@ -159,20 +173,19 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {[
-                { time: "2 min ago", event: "Metrics collected from all nodes", type: "info" },
-                { time: "5 min ago", event: "VM2 CPU usage spike detected (85%)", type: "warning" },
-                { time: "10 min ago", event: "New node VM3 added to monitoring", type: "success" },
-                { time: "1 hour ago", event: "Prometheus configuration reloaded", type: "info" },
-              ].map((activity, index) => (
-                <div key={index} className="flex items-center gap-3 text-sm">
-                  <span className="text-zinc-500 w-20">{activity.time}</span>
-                  <Badge variant={activity.type as any} className="w-20 justify-center">
-                    {activity.type}
-                  </Badge>
-                  <span className="text-zinc-300">{activity.event}</span>
-                </div>
-              ))}
+              {activities.length > 0 ? (
+                activities.map((activity, index) => (
+                  <div key={index} className="flex items-center gap-3 text-sm">
+                    <span className="text-zinc-500 w-24">{activity.time}</span>
+                    <Badge variant={activity.type} className="w-20 justify-center">
+                      {activity.type}
+                    </Badge>
+                    <span className="text-zinc-300">{activity.event}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-zinc-500">Loading activity data...</div>
+              )}
             </div>
           </CardContent>
         </Card>

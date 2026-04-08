@@ -31,6 +31,15 @@ export const initialNodes: VMNode[] = [
     status: 'up',
     role: 'target',
   },
+  {
+    id: 'digitalocean-vps',
+    name: 'DigitalOcean VPS',
+    hostname: 'dastern-vps',
+    ip: '167.71.194.68',
+    port: 9100,
+    status: 'up',
+    role: 'target',
+  },
 ];
 
 export const REFRESH_INTERVAL = 5000; // 5 seconds

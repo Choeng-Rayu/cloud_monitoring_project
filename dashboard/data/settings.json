@@ -1,0 +1,20 @@
+{
+  "prometheus": {
+    "url": "http://192.168.122.101:9090",
+    "scrapeInterval": "5s"
+  },
+  "grafana": {
+    "url": "http://192.168.122.101:3000"
+  },
+  "notifications": {
+    "email": false,
+    "slack": false,
+    "browser": true
+  },
+  "thresholds": {
+    "cpu": 80,
+    "memory": 85,
+    "disk": 90
+  },
+  "updatedAt": "2026-04-08T09:29:51.902Z"
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "log-1775641940227-zn027ry39",
+    "timestamp": "2026-04-08T09:52:20.227Z",
+    "type": "error",
+    "action": "node_add_failed_frontend",
+    "details": "Failed to add node dastern (161.97.66.42): A node with IP 161.97.66.42 has already been added dynamically",
+    "status": "error",
+    "metadata": {
+      "name": "dastern",
+      "ip": "161.97.66.42",
+      "error": "A node with IP 161.97.66.42 has already been added dynamically"
+    }
+  },
+  {
+    "id": "log-1775641875581-kix7swv2w",
+    "timestamp": "2026-04-08T09:51:15.582Z",
+    "type": "error",
+    "action": "node_add_failed_frontend",
+    "details": "Failed to add node dastern (167.97.66.42): SSH connection failed. Check credentials and IP.",
+    "status": "error",
+    "metadata": {
+      "name": "dastern",
+      "ip": "167.97.66.42",
+      "error": "SSH connection failed. Check credentials and IP."
+    }
+  },
+  {
+    "id": "log-1775640591914-ag39d6s8h",
+    "timestamp": "2026-04-08T09:29:51.914Z",
+    "type": "settings",
+    "action": "settings_saved",
+    "details": "Settings saved successfully",
+    "status": "success",
+    "metadata": {
+      "changedFields": [],
+      "thresholds": {
+        "cpu": 80,
+        "memory": 85,
+        "disk": 90
+      }
+    }
+  }
+]

@@ -10,7 +10,8 @@ import {
   Bell,
   Activity,
   BarChart3,
-  Cloud
+  Cloud,
+  FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const navigation = [
   { name: "Add Node", href: "/nodes/add", icon: Plus },
   { name: "Metrics", href: "/metrics", icon: BarChart3 },
   { name: "Alerts", href: "/alerts", icon: Bell },
+  { name: "Logs", href: "/logs", icon: FileText },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

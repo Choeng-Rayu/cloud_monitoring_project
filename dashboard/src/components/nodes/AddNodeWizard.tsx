@@ -11,7 +11,11 @@ import {
   ArrowLeft,
   Loader2,
   Copy,
-  Terminal
+  Terminal,
+  AlertCircle,
+  Download,
+  Settings,
+  Play
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,9 +34,26 @@ interface FormData {
   autoInstall: boolean;
 }
 
+interface InstallationStep {
+  name: string;
+  status: "pending" | "running" | "completed" | "failed";
+  message?: string;
+}
+
+interface NodeResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  node?: {
+    name: string;
+    ip: string;
+    port: number;
+  };
+}
+
 const steps = [
   { id: 1, title: "Node Details", icon: Server },
-  { id: 2, title: "SSH Connection", icon: Key },
+  { id: 2, title: "SSH & Install", icon: Key },
   { id: 3, title: "Installation", icon: Terminal },
   { id: 4, title: "Verification", icon: CheckCircle },
 ];
@@ -41,8 +62,15 @@ export function AddNodeWizard() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<"idle" | "testing" | "success" | "failed">("idle");
-  const [installStatus, setInstallStatus] = useState<"idle" | "installing" | "success" | "failed">("idle");
+  const [error, setError] = useState<string>("");
+  const [installationSteps, setInstallationSteps] = useState<InstallationStep[]>([
+    { name: "Connecting to node via SSH", status: "pending" },
+    { name: "Downloading Node Exporter", status: "pending" },
+    { name: "Installing Node Exporter", status: "pending" },
+    { name: "Configuring systemd service", status: "pending" },
+    { name: "Adding target to Prometheus", status: "pending" },
+  ]);
+  const [nodeResponse, setNodeResponse] = useState<NodeResponse | null>(null);
   const [formData, setFormData] = useState<FormData>({
     name: "",
     ip: "",
@@ -54,53 +82,142 @@ export function AddNodeWizard() {
 
   const updateForm = (field: keyof FormData, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    setError("");
   };
 
-  const testConnection = async () => {
-    setConnectionStatus("testing");
-    // Simulate connection test
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setConnectionStatus("success");
+  const updateInstallationStep = (stepIndex: number, status: InstallationStep["status"], message?: string) => {
+    setInstallationSteps(prev => prev.map((step, idx) => 
+      idx === stepIndex ? { ...step, status, message } : step
+    ));
   };
 
-  const installNodeExporter = async () => {
-    setInstallStatus("installing");
-    // Simulate installation
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    setInstallStatus("success");
+  const submitNodeInstallation = async () => {
+    setIsLoading(true);
+    setError("");
+    setCurrentStep(3);
+
+    try {
+      // Start installation process
+      const response = await fetch("/api/nodes/add", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          hostname: formData.name.toLowerCase().replace(/\s+/g, '-'),
+          ip: formData.ip,
+          port: parseInt(formData.port),
+          sshUsername: formData.sshUser,
+          sshPassword: formData.sshPassword,
+          autoInstall: formData.autoInstall,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // API returns { error: "message" } for errors
+        throw new Error(data.error || data.message || "Failed to add node");
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || data.message || "Failed to add node");
+      }
+
+      // Simulate progress through installation steps
+      // In production, this would be replaced with WebSocket or SSE for real-time updates
+      for (let i = 0; i < installationSteps.length; i++) {
+        updateInstallationStep(i, "running");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Check if installation failed at any step
+        if (!data.success && i === 0) {
+          const stepError = data.error || data.message || "Installation failed";
+          updateInstallationStep(i, "failed", stepError);
+          throw new Error(stepError);
+        }
+        
+        updateInstallationStep(i, "completed");
+      }
+
+      setNodeResponse(data);
+      setCurrentStep(4);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
+      setError(errorMessage);
+      
+      // Log the error to activity log
+      try {
+        await fetch("/api/logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "error",
+            action: "node_add_failed_frontend",
+            details: `Failed to add node ${formData.name} (${formData.ip}): ${errorMessage}`,
+            status: "error",
+            metadata: { name: formData.name, ip: formData.ip, error: errorMessage }
+          })
+        });
+      } catch {
+        // Ignore logging errors
+      }
+      
+      // Mark current running step as failed
+      const runningStepIndex = installationSteps.findIndex(s => s.status === "running");
+      if (runningStepIndex !== -1) {
+        updateInstallationStep(runningStepIndex, "failed", errorMessage);
+      } else {
+        // If no step was running, mark first step as failed
+        updateInstallationStep(0, "failed", errorMessage);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleNext = async () => {
-    if (currentStep === 2) {
-      await testConnection();
-    }
-    if (currentStep === 3 && formData.autoInstall) {
-      await installNodeExporter();
-    }
-    if (currentStep < 4) {
-      setCurrentStep(prev => prev + 1);
-    } else {
-      // Complete
+    if (currentStep === 1) {
+      // Validate form
+      if (!formData.name || !formData.ip) {
+        setError("Please fill in all required fields");
+        return;
+      }
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
+      // Validate SSH credentials
+      if (!formData.sshUser || !formData.sshPassword) {
+        setError("Please provide SSH credentials");
+        return;
+      }
+      // Submit the installation
+      await submitNodeInstallation();
+    } else if (currentStep === 4) {
+      // Complete - redirect to nodes page
       router.push("/nodes");
     }
   };
 
   const handleBack = () => {
-    if (currentStep > 1) {
+    if (currentStep > 1 && currentStep !== 3 && !isLoading) {
       setCurrentStep(prev => prev - 1);
+      setError("");
     }
   };
 
-  const nodeExporterScript = `#!/bin/bash
-# Node Exporter Installation Script
-# Run with: curl -sSL <url> | sudo bash
-
-NODE_EXPORTER_VERSION="1.8.2"
-wget -q https://github.com/prometheus/node_exporter/releases/download/v\${NODE_EXPORTER_VERSION}/node_exporter-\${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz
-tar xzf node_exporter-\${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz
-sudo cp node_exporter-\${NODE_EXPORTER_VERSION}.linux-amd64/node_exporter /usr/local/bin/
-sudo useradd --no-create-home --shell /bin/false node_exporter
-# ... (full script continues)`;
+  const handleRetry = () => {
+    // Reset installation steps
+    setInstallationSteps([
+      { name: "Connecting to node via SSH", status: "pending" },
+      { name: "Downloading Node Exporter", status: "pending" },
+      { name: "Installing Node Exporter", status: "pending" },
+      { name: "Configuring systemd service", status: "pending" },
+      { name: "Adding target to Prometheus", status: "pending" },
+    ]);
+    setError("");
+    setCurrentStep(2);
+  };
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -140,9 +257,9 @@ sudo useradd --no-create-home --shell /bin/false node_exporter
           <CardTitle>{steps[currentStep - 1].title}</CardTitle>
           <CardDescription>
             {currentStep === 1 && "Enter the details of the new node you want to add."}
-            {currentStep === 2 && "Provide SSH credentials to connect to the node."}
-            {currentStep === 3 && "Install Node Exporter on the target machine."}
-            {currentStep === 4 && "Verify the node is connected and sending metrics."}
+            {currentStep === 2 && "Provide SSH credentials and start the installation process."}
+            {currentStep === 3 && "Installing Node Exporter and configuring monitoring."}
+            {currentStep === 4 && "Node is now connected and sending metrics."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -203,26 +320,6 @@ sudo useradd --no-create-home --shell /bin/false node_exporter
                   onChange={(e) => updateForm("sshPassword", e.target.value)}
                 />
               </div>
-              {connectionStatus !== "idle" && (
-                <div className={cn(
-                  "flex items-center gap-2 rounded-lg p-3",
-                  connectionStatus === "testing" && "bg-blue-500/10 text-blue-400",
-                  connectionStatus === "success" && "bg-emerald-500/10 text-emerald-400",
-                  connectionStatus === "failed" && "bg-red-500/10 text-red-400"
-                )}>
-                  {connectionStatus === "testing" && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {connectionStatus === "success" && <CheckCircle className="h-4 w-4" />}
-                  {connectionStatus === "testing" && "Testing SSH connection..."}
-                  {connectionStatus === "success" && "Connection successful!"}
-                  {connectionStatus === "failed" && "Connection failed. Check credentials."}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Step 3: Installation */}
-          {currentStep === 3 && (
-            <div className="space-y-4">
               <div className="flex items-center justify-between rounded-lg border border-zinc-700 p-4">
                 <div>
                   <p className="font-medium text-zinc-200">Auto-install Node Exporter</p>
@@ -235,34 +332,96 @@ sudo useradd --no-create-home --shell /bin/false node_exporter
                   onCheckedChange={(checked) => updateForm("autoInstall", checked)}
                 />
               </div>
-
-              {!formData.autoInstall && (
-                <div className="space-y-2">
-                  <Label>Manual Installation Script</Label>
-                  <div className="relative">
-                    <pre className="max-h-48 overflow-auto rounded-lg bg-zinc-900 p-4 text-xs text-zinc-300">
-                      {nodeExporterScript}
-                    </pre>
-                    <button 
-                      className="absolute right-2 top-2 rounded-md bg-zinc-800 p-2 hover:bg-zinc-700"
-                      onClick={() => navigator.clipboard.writeText(nodeExporterScript)}
-                    >
-                      <Copy className="h-4 w-4 text-zinc-400" />
-                    </button>
-                  </div>
+              {error && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-500/10 p-3 text-red-400">
+                  <AlertCircle className="h-4 w-4" />
+                  {error}
                 </div>
               )}
+            </div>
+          )}
 
-              {installStatus !== "idle" && formData.autoInstall && (
-                <div className={cn(
-                  "flex items-center gap-2 rounded-lg p-3",
-                  installStatus === "installing" && "bg-blue-500/10 text-blue-400",
-                  installStatus === "success" && "bg-emerald-500/10 text-emerald-400"
-                )}>
-                  {installStatus === "installing" && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {installStatus === "success" && <CheckCircle className="h-4 w-4" />}
-                  {installStatus === "installing" && "Installing Node Exporter..."}
-                  {installStatus === "success" && "Node Exporter installed successfully!"}
+          {/* Step 3: Installation Progress */}
+          {currentStep === 3 && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-4">
+                <div className="mb-4 flex items-center gap-3">
+                  <Terminal className="h-6 w-6 text-cyan-400" />
+                  <div>
+                    <p className="font-medium text-cyan-400">Installing Node Exporter</p>
+                    <p className="text-sm text-zinc-400">
+                      Setting up monitoring on {formData.name} ({formData.ip})
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {installationSteps.map((step, index) => {
+                    const StepIcon = 
+                      step.status === "completed" ? CheckCircle :
+                      step.status === "running" ? Loader2 :
+                      step.status === "failed" ? AlertCircle :
+                      index === 0 ? Key :
+                      index === 1 ? Download :
+                      index === 2 ? Terminal :
+                      index === 3 ? Settings :
+                      Play;
+
+                    return (
+                      <div 
+                        key={index}
+                        className={cn(
+                          "flex items-start gap-3 rounded-lg p-3 transition-all",
+                          step.status === "completed" && "bg-emerald-500/10",
+                          step.status === "running" && "bg-blue-500/10",
+                          step.status === "failed" && "bg-red-500/10",
+                          step.status === "pending" && "bg-zinc-800/50"
+                        )}
+                      >
+                        <StepIcon 
+                          className={cn(
+                            "h-5 w-5 mt-0.5",
+                            step.status === "completed" && "text-emerald-400",
+                            step.status === "running" && "text-blue-400 animate-spin",
+                            step.status === "failed" && "text-red-400",
+                            step.status === "pending" && "text-zinc-500"
+                          )}
+                        />
+                        <div className="flex-1">
+                          <p className={cn(
+                            "text-sm font-medium",
+                            step.status === "completed" && "text-emerald-400",
+                            step.status === "running" && "text-blue-400",
+                            step.status === "failed" && "text-red-400",
+                            step.status === "pending" && "text-zinc-500"
+                          )}>
+                            {step.name}
+                          </p>
+                          {step.message && (
+                            <p className="mt-1 text-xs text-zinc-400">{step.message}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {error && (
+                <div className="space-y-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+                  <div className="flex items-center gap-2 text-red-400">
+                    <AlertCircle className="h-5 w-5" />
+                    <span className="font-medium">Installation Failed</span>
+                  </div>
+                  <p className="text-sm text-zinc-300">{error}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRetry}
+                    className="w-full"
+                  >
+                    Try Again
+                  </Button>
                 </div>
               )}
             </div>
@@ -288,15 +447,15 @@ sudo useradd --no-create-home --shell /bin/false node_exporter
                 <div className="grid gap-2 rounded-lg bg-zinc-900 p-4 text-sm">
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Name:</span>
-                    <span className="text-zinc-200">{formData.name}</span>
+                    <span className="text-zinc-200">{nodeResponse?.node?.name || formData.name}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-400">IP Address:</span>
-                    <span className="text-zinc-200">{formData.ip}</span>
+                    <span className="text-zinc-200">{nodeResponse?.node?.ip || formData.ip}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Port:</span>
-                    <span className="text-zinc-200">{formData.port}</span>
+                    <span className="text-zinc-200">{nodeResponse?.node?.port || formData.port}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Status:</span>
@@ -319,7 +478,7 @@ sudo useradd --no-create-home --shell /bin/false node_exporter
             <Button
               variant="outline"
               onClick={handleBack}
-              disabled={currentStep === 1}
+              disabled={currentStep === 1 || currentStep === 3 || isLoading}
               className="gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -327,11 +486,20 @@ sudo useradd --no-create-home --shell /bin/false node_exporter
             </Button>
             <Button
               onClick={handleNext}
-              disabled={isLoading || (currentStep === 1 && (!formData.name || !formData.ip))}
+              disabled={
+                isLoading || 
+                (currentStep === 1 && (!formData.name || !formData.ip)) ||
+                (currentStep === 2 && (!formData.sshUser || !formData.sshPassword)) ||
+                (currentStep === 3 && !error)
+              }
               className="gap-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600"
             >
-              {currentStep === 4 ? "Go to Dashboard" : "Continue"}
-              {currentStep !== 4 && <ArrowRight className="h-4 w-4" />}
+              {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {currentStep === 4 && "Go to Dashboard"}
+              {currentStep === 2 && !isLoading && "Install Node"}
+              {currentStep === 1 && "Continue"}
+              {currentStep !== 4 && !isLoading && currentStep !== 2 && currentStep !== 1 && <ArrowRight className="h-4 w-4" />}
+              {currentStep === 1 && <ArrowRight className="h-4 w-4" />}
             </Button>
           </div>
         </CardContent>

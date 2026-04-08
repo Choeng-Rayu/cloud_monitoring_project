@@ -105,7 +105,8 @@ export async function getNodeMetrics(instance: string): Promise<NodeMetrics | nu
 }
 
 export async function getCPUHistory(instance: string, hours: number = 1): Promise<MetricDataPoint[]> {
-  const end = Math.floor(Date.now() / 1000);
+  const prometheusNow = await getPrometheusTime();
+  const end = Math.floor(prometheusNow / 1000);
   const start = end - (hours * 3600);
   const query = `100 - (avg by(instance) (rate(node_cpu_seconds_total{instance="${instance}",mode="idle"}[5m])) * 100)`;
   
@@ -115,13 +116,15 @@ export async function getCPUHistory(instance: string, hours: number = 1): Promis
       timestamp: timestamp * 1000,
       value: parseFloat(value),
     })) || [];
-  } catch {
+  } catch (error) {
+    console.error(`[getCPUHistory] Error:`, error);
     return [];
   }
 }
 
 export async function getMemoryHistory(instance: string, hours: number = 1): Promise<MetricDataPoint[]> {
-  const end = Math.floor(Date.now() / 1000);
+  const prometheusNow = await getPrometheusTime();
+  const end = Math.floor(prometheusNow / 1000);
   const start = end - (hours * 3600);
   const query = `(1 - (node_memory_MemAvailable_bytes{instance="${instance}"} / node_memory_MemTotal_bytes{instance="${instance}"})) * 100`;
   
@@ -152,5 +155,30 @@ export async function checkPrometheusHealth(): Promise<boolean> {
     return response.ok;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Get the current time from Prometheus server
+ * This ensures we use Prometheus's time instead of local system time,
+ * avoiding timezone mismatches
+ */
+async function getPrometheusTime(): Promise<number> {
+  try {
+    const response = await fetch(`${PROMETHEUS_URL}/api/v1/query?query=time()`, {
+      cache: 'no-store',
+    });
+    const data = await response.json();
+    // Prometheus time() returns a scalar, not a vector
+    // Result format: [timestamp_float, "timestamp_string"]
+    const timeValue = data.data.resultType === 'scalar' 
+      ? parseFloat(data.data.result[0])
+      : parseFloat(data.data.result[0].value[1]);
+    const timeMs = Math.floor(timeValue * 1000);
+    return timeMs;
+  } catch (error) {
+    console.error('[getPrometheusTime] Failed to get Prometheus time, falling back to local time:', error);
+    // Fallback to local time if Prometheus query fails
+    return Date.now();
   }
 }
