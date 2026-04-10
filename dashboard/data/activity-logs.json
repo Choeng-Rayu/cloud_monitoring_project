@@ -1,5 +1,19 @@
 [
   {
+    "id": "log-1775644050893-ckir8pnzr",
+    "timestamp": "2026-04-08T10:27:30.893Z",
+    "type": "node",
+    "action": "node_added",
+    "details": "Node \"dastern\" (161.97.66.42:9100) added to monitoring",
+    "status": "success",
+    "metadata": {
+      "nodeId": "node-1775644050869",
+      "name": "dastern",
+      "ip": "161.97.66.42",
+      "port": 9100
+    }
+  },
+  {
     "id": "log-1775641940227-zn027ry39",
     "timestamp": "2026-04-08T09:52:20.227Z",
     "type": "error",
